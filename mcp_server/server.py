@@ -143,7 +143,30 @@ async def country_info(country_code: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Resources
+# Resource tools — Claude Desktop exposes tools, not resource URIs, in chat
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool
+def server_config() -> str:
+    """List this MCP server's configuration, capabilities, and data sources."""
+    return get_server_config()
+
+
+@mcp.tool
+async def tools_api_health() -> str:
+    """Check whether the Tools API backend is running and reachable."""
+    return await get_health_status()
+
+
+@mcp.tool
+def personalized_greeting(name: str) -> str:
+    """Return a personalized welcome greeting for the given name."""
+    return f"Hello, {name}! Welcome to the Custom Tools MCP Server. How can I help you today?"
+
+
+# ---------------------------------------------------------------------------
+# Resources (MCP protocol — use the tools above in Claude chat)
 # ---------------------------------------------------------------------------
 
 
@@ -159,9 +182,10 @@ def get_server_config() -> str:
             "finance": ["stock_quote", "stock_history"],
             "weather": ["current_weather", "weather_forecast"],
             "misc": ["exchange_rate", "wikipedia", "random_fact", "country_info"],
+            "server": ["server_config", "tools_api_health", "personalized_greeting"],
         },
         "data_sources": {
-            "finance": "Yahoo Finance (yfinance)",
+            "finance": "Yahoo Finance chart API",
             "weather": "Open-Meteo",
             "exchange": "Frankfurter API",
             "wikipedia": "Wikipedia REST API",
