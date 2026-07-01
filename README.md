@@ -177,6 +177,58 @@ For local MCP testing only:
 scripts\start_mcp_server.bat
 ```
 
+### 4. Stop the Tools API and MCP server
+
+#### Stop the Tools API (port 8100)
+
+**If running in a terminal you opened:** focus that window and press **`Ctrl + C`**.
+
+**If running in the background** (or you closed the terminal):
+
+**Windows (PowerShell):**
+
+```powershell
+$p = (Get-NetTCPConnection -LocalPort 8100 -State Listen -ErrorAction SilentlyContinue).OwningProcess
+if ($p) { Stop-Process -Id $p -Force; Write-Host "Stopped PID $p" }
+```
+
+**Windows (CMD):**
+
+```cmd
+for /f "tokens=5" %a in ('netstat -ano ^| findstr ":8100" ^| findstr "LISTENING"') do taskkill /PID %a /F
+```
+
+**macOS / Linux:**
+
+```bash
+lsof -ti :8100 | xargs kill
+```
+
+**Verify it stopped** — this should fail to connect:
+
+```powershell
+curl http://127.0.0.1:8100/health
+```
+
+#### Stop the MCP server
+
+| Scenario | How to stop |
+|----------|-------------|
+| **Claude Desktop (normal use)** | Quit Claude Desktop fully, or disable **custom-tools** in Settings → MCP |
+| **Manual test** (`start_mcp_server.bat`) | Press **`Ctrl + C`** in that terminal |
+
+Claude Desktop starts and stops the MCP server process automatically. You do not need to kill it separately unless you launched `python -m mcp_server.server` yourself.
+
+#### Quick reference
+
+| Component | Stop method |
+|-----------|-------------|
+| Tools API | `Ctrl + C` in its terminal, or kill the process on port **8100** |
+| MCP server | Quit Claude Desktop, or disable the MCP connector |
+| Both | Stop Tools API first, then quit Claude |
+
+> **Note:** MCP tools in Claude (weather, stocks, etc.) require the Tools API on port 8100. After stopping it, restart with `scripts\start_tools_api.bat` before using tools again.
+
 ## MCP Capabilities
 
 ### Tools (15)
