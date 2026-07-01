@@ -485,6 +485,16 @@ flowchart TD
 | MCP server (custom-tools) | `%APPDATA%\Claude\logs\mcp-server-custom-tools.log` |
 | General MCP | `%APPDATA%\Claude\logs\mcp.log` |
 
+## Working Screenshots
+
+<img width="903" height="481" alt="image" src="https://github.com/user-attachments/assets/764a09b3-ba40-493e-a165-c5fb12311182" />
+
+<img width="857" height="850" alt="image" src="https://github.com/user-attachments/assets/a744b287-4675-4973-8b05-d752bd146e11" />
+
+<img width="856" height="822" alt="image" src="https://github.com/user-attachments/assets/bdd74569-0b75-4883-a43c-11b8e5be38e5" />
+
+<img width="851" height="914" alt="image" src="https://github.com/user-attachments/assets/46d6556e-5f96-4946-809f-4860b64327bb" />
+
 ## License
 
 MIT — use freely for learning and development.
