@@ -189,7 +189,7 @@ scripts\start_mcp_server.bat
 | `exchange_rate` | Currency conversion | Frankfurter API |
 | `wikipedia_summary` | Wikipedia article summary | Wikipedia REST |
 | `random_fact` | Random interesting fact | Useless Facts API |
-| `country_info` | Country details by ISO code | REST Countries |
+| `country_info` | Country details by ISO code | World Bank + Wikipedia |
 
 ### Resources (3)
 
@@ -314,15 +314,70 @@ Open the Claude Desktop configuration file:
 
 Fully quit and reopen Claude Desktop. You should see a tools icon when the MCP server is connected.
 
-### Step 4: Verify in Claude
+### Step 4: Example questions for Claude
 
-Try prompts like:
+Once the MCP server is connected, you can ask Claude natural-language questions. Claude will pick the right tool automatically. Below are example prompts for **every tool**, plus the built-in **prompts** and **resources**.
 
-- "Add 42 and 58 using your tools"
-- "What's the current weather in San Francisco?"
-- "Get a stock quote for MSFT"
-- "Convert 100 USD to EUR"
-- "Tell me about Japan using country_info"
+#### Math tools
+
+| Tool | Example questions |
+|------|-------------------|
+| `add` | "Add 42 and 58 using your tools." / "What is 199.5 plus 300.25?" |
+| `calculate_percentage` | "What is 15% of 2,400?" / "Calculate 8.5% of 75,000." |
+| `fibonacci` | "Show me the first 10 Fibonacci numbers." / "Generate the first 20 numbers in the Fibonacci sequence." |
+
+#### Finance tools (Yahoo Finance)
+
+| Tool | Example questions |
+|------|-------------------|
+| `stock_quote` | "Get a live stock quote for AAPL." / "What's the current price of Tesla (TSLA)?" |
+| `stock_history` | "Show me the last 3 months of price history for MSFT." / "Get 1-year historical data for NVDA." |
+
+#### Weather tools (Open-Meteo)
+
+| Tool | Example questions |
+|------|-------------------|
+| `current_weather` | "What's the current weather in Tokyo?" / "How warm is it in London right now?" |
+| `weather_forecast` | "Give me a 5-day weather forecast for Paris." / "What's the 7-day forecast for Mumbai?" |
+
+#### General / misc tools
+
+| Tool | Example questions |
+|------|-------------------|
+| `exchange_rate` | "Convert 100 USD to EUR." / "How much is 50,000 INR in USD?" |
+| `wikipedia_summary` | "Give me a Wikipedia summary of quantum computing." / "Look up Albert Einstein on Wikipedia." |
+| `random_fact` | "Tell me a random interesting fact." / "Share something fun you know." |
+| `country_info` | "Get country info for Japan (JP)." / "Tell me about India using the country_info tool." |
+
+#### Built-in prompts (multi-step workflows)
+
+These are MCP **prompts** — ask Claude to use them by name or describe the workflow:
+
+| Prompt | Example questions |
+|--------|-------------------|
+| `research_assistant` | "Use the research_assistant prompt to help me learn about renewable energy." / "Research blockchain technology using your research workflow." |
+| `travel_planner` | "Use the travel_planner prompt for a trip to Barcelona." / "Help me plan travel to Tokyo — weather, currency, and tips." |
+| `market_analyst` | "Run the market_analyst prompt for GOOGL." / "Analyze AAPL stock using your market analyst workflow." |
+
+#### Resources (read-only data)
+
+Resources are not tools, but Claude can read them when asked:
+
+| Resource | Example questions |
+|----------|-------------------|
+| `config://server` | "Read the config://server resource and list what this MCP server can do." |
+| `status://health` | "Check status://health — is the Tools API backend running?" |
+| `greeting://{name}` | "Read the greeting://Bharath resource." |
+
+#### Combined / real-world examples
+
+Try these to exercise multiple tools in one conversation:
+
+- "I'm flying to London next week. What's the weather, and how much is 500 USD in GBP?"
+- "Research Japan: country info, current weather in Tokyo, and a Wikipedia summary."
+- "Add up my expenses: 1,250 + 890 + 340, then tell me what 18% tax would be on the total."
+- "Compare stock quotes for AAPL and MSFT, then show 1-month history for whichever is higher."
+- "Give me a random fact, then look up that topic on Wikipedia."
 
 ### Integration flow
 

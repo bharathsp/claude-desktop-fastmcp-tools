@@ -128,17 +128,18 @@ async def random_fact() -> str:
 async def country_info(country_code: str) -> str:
     """Get country information by ISO 3166-1 alpha-2 code (e.g. US, IN, JP)."""
     result = await tools_client.get(f"/misc/country-info/{country_code}")
-    currencies = ", ".join(c["code"] for c in result.get("currencies", []))
-    languages = ", ".join(result.get("languages", []))
-    return (
-        f"**{result['name']}** ({result['official_name']})\n"
-        f"Capital: {', '.join(result.get('capital', []))}\n"
-        f"Region: {result['region']} / {result['subregion']}\n"
-        f"Population: {result['population']:,}\n"
-        f"Languages: {languages}\n"
-        f"Currencies: {currencies}\n"
-        f"Flag: {result['flag']}"
-    )
+    lines = [
+        f"**{result['name']}** ({result.get('official_name', result['name'])})",
+        f"Capital: {', '.join(result.get('capital', [])) or 'N/A'}",
+        f"Region: {result.get('region', 'N/A')} / {result.get('subregion', 'N/A')}",
+    ]
+    if result.get("population"):
+        lines.append(f"Population: {result['population']:,}")
+    if result.get("summary"):
+        lines.append(f"\n{result['summary']}")
+    if result.get("url"):
+        lines.append(f"\nRead more: {result['url']}")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +165,7 @@ def get_server_config() -> str:
             "weather": "Open-Meteo",
             "exchange": "Frankfurter API",
             "wikipedia": "Wikipedia REST API",
-            "countries": "REST Countries API",
+            "countries": "World Bank + Wikipedia",
         },
     }
     return json.dumps(config, indent=2)

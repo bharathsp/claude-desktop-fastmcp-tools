@@ -11,4 +11,6 @@ if %errorlevel%==0 (
 )
 
 call venv\Scripts\activate.bat
+REM Disable SSL verify for corporate networks with SSL inspection (external APIs)
+set "TOOLS_API_SSL_VERIFY=false"
 python -m tools_api.main

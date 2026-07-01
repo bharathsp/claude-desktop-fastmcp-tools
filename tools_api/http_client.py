@@ -18,6 +18,7 @@ def async_client(**kwargs) -> httpx.AsyncClient:
     """Create an async HTTP client."""
     kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
     kwargs.setdefault("verify", _verify_setting())
+    kwargs.setdefault("follow_redirects", True)
     return httpx.AsyncClient(**kwargs)
 
 
@@ -25,4 +26,5 @@ def sync_client(**kwargs) -> httpx.Client:
     """Create a sync HTTP client."""
     kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
     kwargs.setdefault("verify", _verify_setting())
+    kwargs.setdefault("follow_redirects", True)
     return httpx.Client(**kwargs)
