@@ -13,14 +13,20 @@ flowchart TB
 
     subgraph mcp_layer [MCP Layer - stdio]
         MCP[FastMCP Server<br/>mcp_server/server.py]
+        LogMCP[Session Logging Middleware]
     end
 
     subgraph tools_layer [Tools Layer - HTTP localhost:8100]
         API[FastAPI Tools API<br/>tools_api/main.py]
+        LogAPI[Session Logging Middleware]
         Math[Math Tools]
         Finance[Finance - Yahoo]
         Weather[Weather - Open-Meteo]
         Misc[Misc - Frankfurter, Wikipedia, etc.]
+    end
+
+    subgraph storage [Logging]
+        Excel[(logs/session_logs.xlsx)]
     end
 
     subgraph external [External APIs - No Keys Required]
@@ -33,7 +39,9 @@ flowchart TB
 
     CD -->|stdio MCP protocol| MCP
     Other -->|stdio MCP protocol| MCP
+    MCP --> LogMCP --> Excel
     MCP -->|HTTP REST| API
+    API --> LogAPI --> Excel
     API --> Math
     API --> Finance
     API --> Weather
@@ -49,24 +57,36 @@ flowchart TB
 
 ```
 custom_mcp_server_with_tools/
-├── venv/                          # Python virtual environment
+├── venv/                              # Python virtual environment
 ├── requirements.txt
 ├── README.md
-├── tools_api/                     # Local Tools API (FastAPI)
-│   ├── main.py                    # App entry point
+├── logs/
+│   └── session_logs.xlsx              # Auto-created session log (Excel)
+├── session_logger/                    # Shared Excel logging module
 │   ├── config.py
+│   ├── excel_logger.py
+│   └── network.py
+├── tools_api/                         # Local Tools API (FastAPI)
+│   ├── main.py                        # App entry point
+│   ├── config.py
+│   ├── http_client.py
+│   ├── middleware/
+│   │   └── session_logging.py         # Logs API requests to Excel
 │   └── routers/
-│       ├── math_tools.py          # add, percentage, fibonacci
-│       ├── finance_tools.py       # Yahoo Finance quotes & history
-│       ├── weather_tools.py       # Open-Meteo current & forecast
-│       └── misc_tools.py          # exchange, wikipedia, facts, countries
-├── mcp_server/                      # MCP Server (FastMCP)
-│   ├── server.py                  # Tools, resources, prompts
-│   ├── tools_client.py            # HTTP client → Tools API
-│   └── config.py
+│       ├── math_tools.py              # add, percentage, fibonacci
+│       ├── finance_tools.py           # Yahoo Finance quotes & history
+│       ├── weather_tools.py           # Open-Meteo current & forecast
+│       └── misc_tools.py              # exchange, wikipedia, facts, countries
+├── mcp_server/                        # MCP Server (FastMCP)
+│   ├── server.py                      # Tools, resources, prompts
+│   ├── tools_client.py                # HTTP client → Tools API
+│   ├── config.py
+│   └── middleware/
+│       └── session_logging.py         # Logs tool/prompt calls to Excel
 └── scripts/
-    ├── start_tools_api.bat
-    └── start_mcp_server.bat
+    ├── start_tools_api.bat            # Start Tools API (checks port 8100)
+    ├── run_mcp_server.bat             # Launcher for Claude Desktop (required on Windows)
+    └── start_mcp_server.bat           # Manual MCP start for local testing
 ```
 
 ## Request Flow
@@ -78,10 +98,13 @@ sequenceDiagram
     participant MCP as FastMCP Server
     participant API as Tools API
     participant Ext as External API
+    participant Log as session_logs.xlsx
 
     User->>Claude: "What's the weather in Tokyo?"
     Claude->>MCP: tools/call current_weather(city="Tokyo")
+    MCP->>Log: Log question + response
     MCP->>API: GET /api/v1/weather/current?city=Tokyo
+    API->>Log: Log request + response
     API->>Ext: Open-Meteo geocode + forecast
     Ext-->>API: Weather data
     API-->>MCP: JSON response
@@ -120,40 +143,35 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Start the Tools API (Terminal 1)
+### 2. Start the Tools API (keep this running)
 
 ```powershell
-# If external APIs fail with SSL errors (common on corporate networks):
+# Corporate networks with SSL inspection may need:
 $env:TOOLS_API_SSL_VERIFY = "false"
 
 python -m tools_api.main
 ```
 
-The API runs at **http://127.0.0.1:8100**. Verify at:
-- Health: http://127.0.0.1:8100/health
-- Swagger docs: http://127.0.0.1:8100/docs
-
-Or use the helper script:
+Or use the helper script (detects if port 8100 is already in use):
 
 ```cmd
 scripts\start_tools_api.bat
 ```
 
-### 3. Start the MCP Server (Terminal 2)
+The API runs at **http://127.0.0.1:8100**. Verify at:
 
-With the Tools API running, start the MCP server (stdio mode for Claude Desktop):
+- Health: http://127.0.0.1:8100/health
+- Swagger docs: http://127.0.0.1:8100/docs
 
-```powershell
-python -m mcp_server.server
-```
+### 3. Connect Claude Desktop
 
-Or:
+See [Claude Desktop Integration](#claude-desktop-integration) below. **Do not** run the MCP server manually when using Claude — it launches the server itself via `scripts/run_mcp_server.bat`.
+
+For local MCP testing only:
 
 ```cmd
 scripts\start_mcp_server.bat
 ```
-
-> **Important:** Claude Desktop launches the MCP server itself via stdio — you do not need to run `python -m mcp_server.server` manually when using Claude Desktop. See integration steps below.
 
 ## MCP Capabilities
 
@@ -234,15 +252,15 @@ curl "http://127.0.0.1:8100/api/v1/misc/exchange-rate?from_currency=USD&to_curre
 
 Claude Desktop connects to MCP servers over **stdio**. You must keep the **Tools API running** in the background — the MCP server depends on it.
 
-### Step 1: Ensure Tools API is running
-
-Start the Tools API as a background service or in a dedicated terminal before using Claude:
+### Step 1: Start the Tools API
 
 ```powershell
 cd "c:\BSP\Agent Studio\GItHub\custom_mcp_server_with_tools"
 .\venv\Scripts\Activate.ps1
 python -m tools_api.main
 ```
+
+Leave this terminal open.
 
 ### Step 2: Edit Claude Desktop config
 
@@ -253,10 +271,12 @@ Open the Claude Desktop configuration file:
 | **Windows** | `%APPDATA%\Claude\claude_desktop_config.json` |
 | **macOS** | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 
-Add your MCP server under `mcpServers`:
+**Merge** the `mcpServers` block into your **existing** config — do not replace the entire file. The file must remain a single JSON object:
 
 ```json
 {
+  "preferences": { ... },
+  "coworkUserFilesPath": "...",
   "mcpServers": {
     "custom-tools": {
       "command": "c:\\BSP\\Agent Studio\\GItHub\\custom_mcp_server_with_tools\\scripts\\run_mcp_server.bat",
@@ -269,9 +289,9 @@ Add your MCP server under `mcpServers`:
 }
 ```
 
-> **Important (Windows):** Use the `run_mcp_server.bat` launcher instead of calling `python.exe -m mcp_server.server` directly. Claude Desktop may not honor the `cwd` field, which causes `ModuleNotFoundError: No module named 'mcp_server'`.
+> **Windows — use the batch launcher:** Point `command` to `scripts\run_mcp_server.bat`, not `python.exe` directly. Claude Desktop may ignore the `cwd` field, causing `ModuleNotFoundError: No module named 'mcp_server'`.
 
-> **Note:** Use double backslashes (`\\`) in Windows paths inside JSON. Adjust paths if your project lives elsewhere.
+> **JSON syntax:** Use double backslashes (`\\`) in Windows paths. Never paste a second `{ ... }` block after the existing config — that causes a parse error.
 
 **macOS / Linux example:**
 
@@ -292,7 +312,7 @@ Add your MCP server under `mcpServers`:
 
 ### Step 3: Restart Claude Desktop
 
-Fully quit and reopen Claude Desktop. You should see a hammer/tools icon indicating the MCP server is connected.
+Fully quit and reopen Claude Desktop. You should see a tools icon when the MCP server is connected.
 
 ### Step 4: Verify in Claude
 
@@ -308,12 +328,43 @@ Try prompts like:
 
 ```mermaid
 flowchart LR
-    A[Start Tools API on :8100] --> B[Edit claude_desktop_config.json]
+    A[Start Tools API on :8100] --> B[Merge mcpServers into claude_desktop_config.json]
     B --> C[Restart Claude Desktop]
-    C --> D[Claude spawns MCP server via stdio]
+    C --> D[Claude runs run_mcp_server.bat]
     D --> E[MCP server calls Tools API over HTTP]
     E --> F[Tools available in Claude chat]
+    E --> G[Session logged to Excel]
 ```
+
+## Session Logging
+
+Every tool call, resource read, prompt request, and API call is logged to an Excel file.
+
+| Column | Description |
+|--------|-------------|
+| Timestamp | UTC time of the interaction |
+| User IP Address | Client IP (HTTP) or local machine IP (stdio MCP) |
+| Host | HTTP `Host` header or machine hostname |
+| Question | Tool name + arguments, API path + payload, or prompt input |
+| Response | Tool result, API response body, or prompt output |
+
+**Default log file:** `logs/session_logs.xlsx` (created automatically on first log entry)
+
+```mermaid
+flowchart LR
+    Claude[Claude Desktop] -->|tool call| MCP[MCP Middleware]
+    MCP -->|log row| Excel[(session_logs.xlsx)]
+    MCP -->|HTTP| API[Tools API Middleware]
+    API -->|log row| Excel
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SESSION_LOG_ENABLED` | `true` | Enable/disable Excel logging |
+| `SESSION_LOG_EXCEL_PATH` | `logs/session_logs.xlsx` | Path to the Excel log file |
+| `SESSION_LOG_MAX_CELL_LENGTH` | `32000` | Max characters per cell |
+
+> Close the Excel file in other programs while the server is running to avoid file-lock errors on Windows.
 
 ## Configuration
 
@@ -327,6 +378,7 @@ Environment variables (optional):
 | `MCP_SERVER_NAME` | `Custom Tools MCP Server` | Display name in MCP |
 | `TOOLS_API_SSL_VERIFY` | `true` | Set to `false` on networks with SSL inspection |
 | `MCP_SSL_VERIFY` | `true` | SSL verify for MCP server's outbound HTTP calls |
+| `FASTMCP_SHOW_SERVER_BANNER` | `false` | Disabled in `run_mcp_server.bat` (banner breaks stdio) |
 
 ## Development
 
@@ -334,66 +386,49 @@ Environment variables (optional):
 
 1. **`tools_api/routers/*.py`** — Implement tool logic (math, HTTP calls to external APIs).
 2. **`tools_api/main.py`** — Register routers on FastAPI; serve at `localhost:8100`.
-3. **`mcp_server/tools_client.py`** — Async HTTP client wrapping Tools API calls.
-4. **`mcp_server/server.py`** — Decorate functions with `@mcp.tool`, `@mcp.resource`, `@mcp.prompt`; each tool calls `tools_client`.
-5. **Claude Desktop** — Spawns `python -m mcp_server.server` over stdio; user messages trigger tool calls through the MCP protocol.
+3. **`tools_api/middleware/session_logging.py`** — Log every API request to Excel.
+4. **`mcp_server/tools_client.py`** — Async HTTP client wrapping Tools API calls.
+5. **`mcp_server/server.py`** — Decorate functions with `@mcp.tool`, `@mcp.resource`, `@mcp.prompt`.
+6. **`mcp_server/middleware/session_logging.py`** — Log every MCP tool/prompt/resource call to Excel.
+7. **`session_logger/`** — Shared thread-safe Excel writer used by both layers.
+8. **Claude Desktop** — Spawns `run_mcp_server.bat` over stdio.
 
 ### Adding a new tool
 
 ```mermaid
 flowchart TD
     A[Add endpoint in tools_api/routers] --> B[Register router in tools_api/main.py]
-    B --> C[Add client method in tools_client.py if needed]
-    C --> D[Add @mcp.tool in mcp_server/server.py]
-    D --> E[Test via /docs then Claude]
+    B --> C[Add @mcp.tool in mcp_server/server.py]
+    C --> D[Test via /docs then Claude]
+    D --> E[Verify row in session_logs.xlsx]
 ```
 
 1. Create endpoint in `tools_api/routers/`.
 2. Include router in `tools_api/main.py`.
 3. Add `@mcp.tool` wrapper in `mcp_server/server.py` that calls `tools_client`.
 
-## Session Logging
-
-Every tool call, resource read, and prompt request is logged to an Excel file.
-
-| Column | Description |
-|--------|-------------|
-| Timestamp | UTC time of the interaction |
-| User IP Address | Client IP (HTTP) or local machine IP (stdio MCP) |
-| Host | HTTP `Host` header or machine hostname |
-| Question | Tool name + arguments, API path + payload, or prompt input |
-| Response | Tool result, API response body, or prompt output |
-
-**Default log file:** `logs/session_logs.xlsx`
-
-```mermaid
-flowchart LR
-    Claude[Claude Desktop] -->|tool call| MCP[MCP Middleware]
-    MCP -->|log row| Excel[(session_logs.xlsx)]
-    MCP -->|HTTP| API[Tools API Middleware]
-    API -->|log row| Excel
-```
-
-### Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SESSION_LOG_ENABLED` | `true` | Enable/disable Excel logging |
-| `SESSION_LOG_EXCEL_PATH` | `logs/session_logs.xlsx` | Path to the Excel log file |
-| `SESSION_LOG_MAX_CELL_LENGTH` | `32000` | Max characters per cell |
-
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
+| `Could not load app settings` / JSON parse error | Merge `mcpServers` inside the existing config object — never append a second `{...}` block |
+| MCP server shows "Server disconnected" | Use `scripts/run_mcp_server.bat` in Claude config (not `python.exe` directly) |
+| `ModuleNotFoundError: No module named 'mcp_server'` | Same fix — use `run_mcp_server.bat` which sets the correct working directory |
 | MCP tools fail with connection error | Ensure Tools API is running on port 8100 |
-| MCP server shows "Server disconnected" | Use `scripts/run_mcp_server.bat` in Claude config (see above) |
-| Tools API port 8100 already in use | Tools API is already running — use it, or run `scripts\start_tools_api.bat` for guidance |
-| Claude doesn't show tools | Check `claude_desktop_config.json` paths; restart Claude fully |
+| Tools API port 8100 already in use | API is already running — use it, or run `scripts\start_tools_api.bat` for kill instructions |
+| Claude doesn't show tools | Check config paths; fully restart Claude; check `%APPDATA%\Claude\logs\mcp-server-custom-tools.log` |
 | Stock quote returns 404 | Verify ticker symbol (e.g. `AAPL`, not `Apple`) |
 | Weather city not found | Use city name in English (e.g. `New York`, `Mumbai`) |
-| SSL / certificate errors on external APIs | Set `TOOLS_API_SSL_VERIFY=false` before starting Tools API (corporate networks) |
+| SSL / certificate errors on external APIs | Set `TOOLS_API_SSL_VERIFY=false` before starting Tools API |
 | Permission error on venv activate (PowerShell) | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
+| Excel log not updating | Close `session_logs.xlsx` if open in Excel; check `SESSION_LOG_ENABLED=true` |
+
+### Claude Desktop log files (Windows)
+
+| Log | Path |
+|-----|------|
+| MCP server (custom-tools) | `%APPDATA%\Claude\logs\mcp-server-custom-tools.log` |
+| General MCP | `%APPDATA%\Claude\logs\mcp.log` |
 
 ## License
 
