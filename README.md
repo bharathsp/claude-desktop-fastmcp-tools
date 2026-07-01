@@ -30,11 +30,11 @@ flowchart TB
     end
 
     subgraph external [External APIs - No Keys Required]
-        YF[Yahoo Finance]
+        YF[Yahoo Finance Chart API]
         OM[Open-Meteo]
         FF[Frankfurter]
         Wiki[Wikipedia]
-        RC[REST Countries]
+        WB[World Bank]
     end
 
     CD -->|stdio MCP protocol| MCP
@@ -50,7 +50,7 @@ flowchart TB
     Weather --> OM
     Misc --> FF
     Misc --> Wiki
-    Misc --> RC
+    Misc --> WB
 ```
 
 ## Project Structure
@@ -74,7 +74,7 @@ custom_mcp_server_with_tools/
 │   │   └── session_logging.py         # Logs API requests to Excel
 │   └── routers/
 │       ├── math_tools.py              # add, percentage, fibonacci
-│       ├── finance_tools.py           # Yahoo Finance quotes & history
+│       ├── finance_tools.py           # Yahoo Finance chart API (quotes & history)
 │       ├── weather_tools.py           # Open-Meteo current & forecast
 │       └── misc_tools.py              # exchange, wikipedia, facts, countries
 ├── mcp_server/                        # MCP Server (FastMCP)
@@ -145,18 +145,22 @@ pip install -r requirements.txt
 
 ### 2. Start the Tools API (keep this running)
 
+**Recommended** — uses `scripts\start_tools_api.bat` (sets `TOOLS_API_SSL_VERIFY=false` for corporate networks):
+
+```cmd
+scripts\start_tools_api.bat
+```
+
+Or manually:
+
 ```powershell
-# Corporate networks with SSL inspection may need:
+# Required on many corporate networks with SSL inspection:
 $env:TOOLS_API_SSL_VERIFY = "false"
 
 python -m tools_api.main
 ```
 
-Or use the helper script (detects if port 8100 is already in use):
-
-```cmd
-scripts\start_tools_api.bat
-```
+> **Note:** `start_tools_api.bat` detects if port 8100 is already in use and prints kill instructions instead of failing.
 
 The API runs at **http://127.0.0.1:8100**. Verify at:
 
@@ -175,37 +179,48 @@ scripts\start_mcp_server.bat
 
 ## MCP Capabilities
 
-### Tools (12)
+### Tools (15)
+
+Claude Desktop exposes **tools** in chat. Use these names when asking Claude to call your MCP server.
 
 | Tool | Description | Backend |
 |------|-------------|---------|
 | `add` | Add two numbers | Tools API → `/math/add` |
 | `calculate_percentage` | Calculate % of a value | Tools API → `/math/percentage` |
 | `fibonacci` | First n Fibonacci numbers | Tools API → `/math/fibonacci/{n}` |
-| `stock_quote` | Live stock quote | Yahoo Finance |
-| `stock_history` | Historical OHLCV data | Yahoo Finance |
+| `stock_quote` | Live stock quote | Yahoo Finance chart API |
+| `stock_history` | Historical OHLCV data | Yahoo Finance chart API |
 | `current_weather` | Current weather for a city | Open-Meteo |
 | `weather_forecast` | Multi-day forecast | Open-Meteo |
-| `exchange_rate` | Currency conversion | Frankfurter API |
+| `exchange_rate` | Currency conversion | Frankfurter API (`api.frankfurter.dev`) |
 | `wikipedia_summary` | Wikipedia article summary | Wikipedia REST |
 | `random_fact` | Random interesting fact | Useless Facts API |
 | `country_info` | Country details by ISO code | World Bank + Wikipedia |
+| `server_config` | Server capabilities & config | MCP (wraps `config://server`) |
+| `tools_api_health` | Tools API health check | MCP (wraps `status://health`) |
+| `personalized_greeting` | Welcome greeting by name | MCP (wraps `greeting://{name}`) |
 
 ### Resources (3)
 
-| URI | Description |
-|-----|-------------|
-| `config://server` | Static server config and capability list |
-| `status://health` | Live Tools API health check |
-| `greeting://{name}` | Dynamic personalized greeting |
+MCP **resources** exist for the protocol but **Claude Desktop does not expose them in chat**. Use the matching **tools** above instead:
+
+| Resource URI | Use this tool in Claude |
+|--------------|-------------------------|
+| `config://server` | `server_config` |
+| `status://health` | `tools_api_health` |
+| `greeting://{name}` | `personalized_greeting` |
 
 ### Prompts (3)
+
+MCP **prompts** are multi-step workflow templates. Ask Claude to use them by name:
 
 | Prompt | Description |
 |--------|-------------|
 | `research_assistant` | Research workflow using Wikipedia + tools |
 | `travel_planner` | Travel planning with weather + currency |
 | `market_analyst` | Stock analysis workflow |
+
+> **Claude Desktop note:** Prompts may appear in the MCP prompts menu depending on your Claude version. You can also describe the workflow in natural language and Claude will call the underlying tools.
 
 ## Tools API Endpoints
 
@@ -244,6 +259,9 @@ curl -X POST http://127.0.0.1:8100/api/v1/finance/quote -H "Content-Type: applic
 # Current weather
 curl "http://127.0.0.1:8100/api/v1/weather/current?city=London"
 
+# Country info (Japan)
+curl "http://127.0.0.1:8100/api/v1/misc/country-info/JP"
+
 # Exchange rate
 curl "http://127.0.0.1:8100/api/v1/misc/exchange-rate?from_currency=USD&to_currency=INR&amount=100"
 ```
@@ -254,9 +272,16 @@ Claude Desktop connects to MCP servers over **stdio**. You must keep the **Tools
 
 ### Step 1: Start the Tools API
 
+```cmd
+scripts\start_tools_api.bat
+```
+
+Or manually (set SSL flag on corporate networks):
+
 ```powershell
 cd "c:\BSP\Agent Studio\GItHub\custom_mcp_server_with_tools"
 .\venv\Scripts\Activate.ps1
+$env:TOOLS_API_SSL_VERIFY = "false"
 python -m tools_api.main
 ```
 
@@ -316,7 +341,7 @@ Fully quit and reopen Claude Desktop. You should see a tools icon when the MCP s
 
 ### Step 4: Example questions for Claude
 
-Once the MCP server is connected, you can ask Claude natural-language questions. Claude will pick the right tool automatically. Below are example prompts for **every tool**, plus the built-in **prompts** and **resources**.
+Once the MCP server is connected, you can ask Claude natural-language questions. Claude will pick the right tool automatically. Below are example prompts for **all 15 tools**, plus **prompts** and notes on **resources**.
 
 #### Math tools
 
@@ -359,15 +384,23 @@ These are MCP **prompts** — ask Claude to use them by name or describe the wor
 | `travel_planner` | "Use the travel_planner prompt for a trip to Barcelona." / "Help me plan travel to Tokyo — weather, currency, and tips." |
 | `market_analyst` | "Run the market_analyst prompt for GOOGL." / "Analyze AAPL stock using your market analyst workflow." |
 
-#### Resources (read-only data)
+#### Server / MCP tools
 
-Resources are not tools, but Claude can read them when asked:
+| Tool | Example questions |
+|------|-------------------|
+| `server_config` | "Use server_config to list everything this MCP server can do." |
+| `tools_api_health` | "Run tools_api_health — is the backend API up?" |
+| `personalized_greeting` | "Use personalized_greeting with my name Bharath." |
 
-| Resource | Example questions |
-|----------|-------------------|
-| `config://server` | "Read the config://server resource and list what this MCP server can do." |
-| `status://health` | "Check status://health — is the Tools API backend running?" |
-| `greeting://{name}` | "Read the greeting://Bharath resource." |
+#### MCP resources (not callable in Claude chat)
+
+Claude Desktop does **not** read resource URIs like `greeting://Bharath` directly. Use the **tools** in the table above instead:
+
+| Resource URI | Ask Claude to use |
+|--------------|-------------------|
+| `config://server` | `server_config` |
+| `status://health` | `tools_api_health` |
+| `greeting://{name}` | `personalized_greeting` |
 
 #### Combined / real-world examples
 
@@ -378,6 +411,7 @@ Try these to exercise multiple tools in one conversation:
 - "Add up my expenses: 1,250 + 890 + 340, then tell me what 18% tax would be on the total."
 - "Compare stock quotes for AAPL and MSFT, then show 1-month history for whichever is higher."
 - "Give me a random fact, then look up that topic on Wikipedia."
+- "Run tools_api_health, then get a stock quote for AAPL if the API is healthy."
 
 ### Integration flow
 
@@ -431,9 +465,19 @@ Environment variables (optional):
 | `TOOLS_API_PORT` | `8100` | Tools API bind port |
 | `MCP_TOOLS_API_BASE_URL` | `http://127.0.0.1:8100` | URL the MCP server uses to reach Tools API |
 | `MCP_SERVER_NAME` | `Custom Tools MCP Server` | Display name in MCP |
-| `TOOLS_API_SSL_VERIFY` | `true` | Set to `false` on networks with SSL inspection |
+| `TOOLS_API_SSL_VERIFY` | `true` | Set to `false` on networks with SSL inspection (**required** for many corporate networks) |
 | `MCP_SSL_VERIFY` | `true` | SSL verify for MCP server's outbound HTTP calls |
 | `FASTMCP_SHOW_SERVER_BANNER` | `false` | Disabled in `run_mcp_server.bat` (banner breaks stdio) |
+
+### Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `fastmcp` | MCP server framework |
+| `fastapi` + `uvicorn` | Tools API |
+| `httpx` + `certifi` | HTTP client for external APIs |
+| `openpyxl` | Session logging to Excel |
+| `pydantic` + `pydantic-settings` | Config and request validation |
 
 ## Development
 
@@ -472,6 +516,9 @@ flowchart TD
 | MCP tools fail with connection error | Ensure Tools API is running on port 8100 |
 | Tools API port 8100 already in use | API is already running — use it, or run `scripts\start_tools_api.bat` for kill instructions |
 | Claude doesn't show tools | Check config paths; fully restart Claude; check `%APPDATA%\Claude\logs\mcp-server-custom-tools.log` |
+| Claude says it has no resource reader / `greeting://` fails | Use tools instead: `personalized_greeting`, `server_config`, `tools_api_health` |
+| Stock quote 500 error | Restart Tools API with `TOOLS_API_SSL_VERIFY=false`; finance uses Yahoo chart API via httpx |
+| `exchange_rate` or `country_info` 500 error | Restart Tools API with `TOOLS_API_SSL_VERIFY=false` (external API SSL issue) |
 | Stock quote returns 404 | Verify ticker symbol (e.g. `AAPL`, not `Apple`) |
 | Weather city not found | Use city name in English (e.g. `New York`, `Mumbai`) |
 | SSL / certificate errors on external APIs | Set `TOOLS_API_SSL_VERIFY=false` before starting Tools API |
