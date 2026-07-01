@@ -1,0 +1,12 @@
+# Local development artifacts
+venv/
+logs/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.venv/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
